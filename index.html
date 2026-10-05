@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1,">
+<title>Tickerboard – global stocks, no login</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f4;--panel:#fff;--ink:#14202e;--mute:#5d6b7b;--line:#d5dce3;--up:#0b7a5a;--down:#c2412d;--acc:#1d4ed8;--accbg:#e3ebff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1720;--panel:#17212c;--ink:#e6edf3;--mute:#93a1b0;--line:#2a3745;--up:#3fcf9f;--down:#ff8a72;--acc:#8fb0ff;--accbg:#22314d}}
+:root[data-theme="dark"]{--bg:#0f1720;--panel:#17212c;--ink:#e6edf3;--mute:#93a1b0;--line:#2a3745;--up:#3fcf9f;--down:#ff8a72;--acc:#8fb0ff;--accbg:#22314d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+h1,h2,h3{font-family:Newsreader,Georgia,serif;font-weight:600;margin:0}
+h1{font-size:2rem}h2{font-size:1.4rem;margin:20px 0 8px}h3{font-size:1.1rem}
+.sub{color:var(--mute);margin:4px 0 12px;max-width:62ch}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0;border-bottom:1px solid var(--line);padding-bottom:10px}
+button,input,select{font:inherit;color:inherit}
+nav button,.chip{background:none;border:1px solid transparent;padding:7px 14px;border-radius:999px;cursor:pointer}
+nav button[aria-selected=true]{background:var(--accbg);color:var(--acc);border-color:var(--acc)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.note{background:var(--accbg);border-radius:8px;padding:8px 12px;font-size:.9rem;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.big{font-size:1.3rem;font-weight:700}.up{color:var(--up)}.down{color:var(--down)}.mute{color:var(--mute);font-size:.88rem}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+input,select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{cursor:pointer;font-weight:500;color:var(--mute);font-size:.88rem}
+.star{background:none;border:0;cursor:pointer;font-size:1.2rem;color:var(--mute)}.star.on{color:#d99a00}
+.bar{height:8px;background:var(--accbg);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+ol.steps li{margin-bottom:10px}footer{color:var(--mute);font-size:.85rem;margin:28px 0 10px}
+</style></head><body><div class="wrap">
+<h1>Tickerboard</h1>
+<p class="sub">Global stock stats and popular trades. No account needed. Star stocks to build your own dashboard, saved in this browser.</p>
+<div class="note" id="note"></div>
+<nav role="tablist" id="tabs"></nav>
+<main id="view"></main>
+<footer>Not financial advice. Your saved stocks and API key stay in this browser. The key is sent only to alphavantage.co.</footer>
+</div>
+<script>
+const S=[["AAPL","Apple","US",228.4,0.8,52,3500],["MSFT","Microsoft","US",421.1,-0.4,21,3130],["NVDA","NVIDIA","US",131.9,2.9,310,3250],["TSLA","Tesla","US",248.7,-1.8,88,795],["AMZN","Amazon","US",186.3,0.6,41,1940],
+["RELIANCE","Reliance Industries","India",2910,0.5,9,1970],["TCS","Tata Consultancy","India",4120,-0.7,3,1490],["HDFCBANK","HDFC Bank","India",1685,1.1,14,1280],["INFY","Infosys","India",1890,0.3,7,780],
+["ASML","ASML","Europe",905,1.4,2,360],["SAP","SAP","Europe",208,0.2,3,255],["MC","LVMH","Europe",645,-1.2,1,320],["NESN","Nestlé","Europe",92,-0.3,5,265],
+["TSM","TSMC","Asia",171,2.1,17,880],["7203","Toyota","Asia",2830,0.9,15,265],["005930","Samsung","Asia",73400,-0.6,16,490],["0700","Tencent","Asia",385,1.7,19,470],["SHEL","Shell","Europe",2620,0.1,18,205]];
+const IDX=[["S&P 500",5760,0.4],["Nasdaq",18190,0.7],["Nifty 50",25050,0.3],["Sensex",81900,0.2],["FTSE 100",8280,-0.2],["DAX",19060,0.5],["Nikkei 225",38650,-0.9],["Hang Seng",21200,1.3]];
+let saved=[];try{saved=JSON.parse(localStorage.getItem("tb.saved")||"[]")}catch(e){}
+const save=()=>{try{localStorage.setItem("tb.saved",JSON.stringify(saved))}catch(e){}};
+let tab="Markets",q="",reg="All",sort={k:5,d:-1};
+const f=(n,d=2)=>n.toLocaleString("en-IN",{maximumFractionDigits:d});
+const pc=c=>`<span class="${c>=0?"up":"down"}">${c>=0?"▲":"▼"} ${Math.abs(c).toFixed(1)}%</span>`;
+function toggle(s){saved=saved.includes(s)?saved.filter(x=>x!==s):[...saved,s];save();render();refresh()}
+const star=s=>`<button class="star ${saved.includes(s)?"on":""}" data-s="${s}" aria-label="${saved.includes(s)?"Remove":"Save"} ${s}">${saved.includes(s)?"★":"☆"}</button>`;
+const TABS=["Markets","Stocks","Popular trades","My dashboard","Live data"];
+function markets(){return `<h2>World indices</h2><div class="grid">${IDX.map(i=>`<div class="box"><div class="mute">${i[0]}</div><div class="big">${f(i[1])}</div>${pc(i[2])}</div>`).join("")}</div>
+<h2>Top movers today</h2><div class="grid">${[...S].sort((a,b)=>Math.abs(b[4])-Math.abs(a[4])).slice(0,4).map(s=>`<div class="box"><div class="row"><b>${s[0]}</b>${star(s[0])}</div><div class="mute">${s[1]} · ${s[2]}</div><div class="row"><span class="big">${f(s[3])}</span>${pc(s[4])}</div></div>`).join("")}</div>`}
+function stocks(){let r=S.filter(s=>(reg=="All"||s[2]==reg)&&(s[0]+s[1]).toLowerCase().includes(q.toLowerCase()));r.sort((a,b)=>(a[sort.k]>b[sort.k]?1:-1)*sort.d);
+const H=["Symbol","Name","Region","Price","Change","Volume (M)","Mkt cap ($B)"];
+return `<h2>All stocks</h2><div class="tools"><input id="q" type="search" placeholder="Search symbol or company" value="${q}" aria-label="Search stocks"><select id="reg" aria-label="Region">${["All","US","India","Europe","Asia"].map(x=>`<option ${x==reg?"selected":""}>${x}</option>`).join("")}</select></div>
+<div class="scroll"><table><thead><tr><th></th>${H.map((h,i)=>`<th data-k="${i}">${h}${sort.k==i?(sort.d>0?" ↑":" ↓"):""}</th>`).join("")}</tr></thead><tbody>${r.map(s=>`<tr><td>${star(s[0])}</td><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${s[2]}</td><td>${f(s[3])}</td><td>${pc(s[4])}</td><td>${s[5]}</td><td>${f(s[6],0)}</td></tr>`).join("")||`<tr><td colspan="8">No match. Try another name or region.</td></tr>`}</tbody></table></div>`}
+function popular(){const t=[...S].sort((a,b)=>b[5]-a[5]).slice(0,8),m=t[0][5];
+return `<h2>Most traded today</h2><p class="sub">Ranked by share volume across all regions.</p><div class="box">${t.map(s=>`<div style="margin:8px 0"><div class="row"><span><b>${s[0]}</b> <span class="mute">${s[1]}</span></span><span>${s[5]}M ${pc(s[4])} ${star(s[0])}</span></div><div class="bar"><i style="width:${s[5]/m*100}%"></i></div></div>`).join("")}</div>`}
+function dash(){const r=S.filter(s=>saved.includes(s[0]));if(!r.length)return `<h2>My dashboard</h2><div class="box">Nothing saved yet. Open Stocks or Popular trades and tap ☆ to add a stock here.</div>`;
+const avg=r.reduce((a,s)=>a+s[4],0)/r.length;
+return `<h2>My dashboard</h2><p class="sub">${r.length} saved · average move ${pc(avg)}</p><div class="grid">${r.map(s=>`<div class="box"><div class="row"><b>${s[0]}</b>${star(s[0])}</div><div class="mute">${s[1]} · ${s[2]}</div><div class="row"><span class="big">${f(s[3])}</span>${pc(s[4])}</div><div class="mute">Volume ${s[5]}M · Cap $${f(s[6],0)}B</div></div>`).join("")}</div><p><button class="chip" id="rf">Refresh quotes</button> <button class="chip" id="clr">Clear dashboard</button></p><p class="mute">${msg}</p>`}
+function render(){const nt=document.getElementById("note");if(nt)nt.textContent=key?"Saved stocks show delayed live quotes. Everything else is sample data.":"Sample data. Add a free key under Live data to see real quotes for your saved stocks.";document.getElementById("tabs").innerHTML=TABS.map(t=>`<button role="tab" aria-selected="${t==tab}" data-t="${t}">${t}${t=="My dashboard"&&saved.length?" ("+saved.length+")":""}</button>`).join("");
+document.getElementById("view").innerHTML={Markets:markets,Stocks:stocks,"Popular trades":popular,"My dashboard":dash,"Live data":livev}[tab]();
+const qi=document.getElementById("q");if(qi&&document.activeElement===document.body&&q){qi.focus();qi.setSelectionRange(q.length,q.length)}}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-t],[data-s],[data-k],#clr,#rf,#sk,#dk");if(!t)return;
+if(t.dataset.t){tab=t.dataset.t;render()}else if(t.dataset.s)toggle(t.dataset.s);else if(t.dataset.k){const k=+t.dataset.k;sort=sort.k==k?{k,d:-sort.d}:{k,d:-1};render()}else if(t.id=="clr"){saved=[];save();render()}else if(t.id=="rf")refresh(true);else if(t.id=="sk")setKey();else if(t.id=="dk"){key="";try{localStorage.removeItem(K)}catch(x){}msg="Key removed.";render()}});
+document.addEventListener("input",e=>{if(e.target.id=="q"){q=e.target.value;const p=e.target.selectionStart;render();const n=document.getElementById("q");n.focus();n.setSelectionRange(p,p)}});
+document.addEventListener("change",e=>{if(e.target.id=="reg"){reg=e.target.value;render()}});
+
+const K="tb.key",Q="tb.q",MAP={RELIANCE:"RELIANCE.BSE",TCS:"TCS.BSE",HDFCBANK:"HDFCBANK.BSE",INFY:"INFY.BSE",ASML:"ASML.AMS",SAP:"SAP.DEX",MC:"MC.PAR",NESN:"NESN.SWI","7203":"7203.TYO","005930":"005930.KRX","0700":"0700.HKG",SHEL:"SHEL.LON"};
+let key="",qc={},msg="";try{key=localStorage.getItem(K)||"";qc=JSON.parse(localStorage.getItem(Q)||"{}")}catch(e){}
+const apply=(sym,o)=>{const s=S.find(x=>x[0]==sym);if(s){s[3]=o.p;s[4]=o.c;s[5]=o.v}};
+Object.entries(qc).forEach(([k,o])=>apply(k,o));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function fetchQ(sym){const r=await fetch("https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol="+encodeURIComponent(MAP[sym]||sym)+"&apikey="+encodeURIComponent(key));const j=await r.json(),g=j["Global Quote"];
+if(g&&g["05. price"]){const o={p:+g["05. price"],c:parseFloat(g["10. change percent"]),v:+(g["06. volume"]/1e6).toFixed(1),t:Date.now()};qc[sym]=o;try{localStorage.setItem(Q,JSON.stringify(qc))}catch(e){}apply(sym,o);return"ok"}
+return(j.Note||j.Information)?"limit":"none"}
+async function refresh(force){if(!key)return;let n=0;msg="Updating saved stocks…";render();
+for(const sym of saved){const o=qc[sym];if(!force&&o&&Date.now()-o.t<9e5)continue;
+try{const r=await fetchQ(sym);if(r=="limit"){msg="Alpha Vantage says the limit is reached or the key is invalid. Wait a minute, or check your key.";render();return}if(r=="ok")n++}
+catch(e){msg="Couldn't reach Alpha Vantage. Check your connection and try again.";render();return}
+render();await sleep(1300)}
+msg=n?"Updated "+n+" stock"+(n>1?"s":"")+".":"Saved stocks are up to date.";render()}
+async function setKey(){const v=document.getElementById("kin").value.trim();if(!v){msg="Paste your key first.";render();return}
+key=v;try{localStorage.setItem(K,v)}catch(e){}msg="Testing your key…";render();
+try{const r=await fetchQ("IBM");msg=r=="ok"?"Key works. Your saved stocks will now show live quotes.":r=="limit"?"Alpha Vantage rejected the key or the limit is reached. Check the key and try again.":"No data came back. Check the key.";render();if(r=="ok")refresh(true)}
+catch(e){msg="Couldn't reach Alpha Vantage. Check your connection and try again.";render()}}
+function livev(){return `<h2>Live data</h2><p class="sub">Use your own free Alpha Vantage key. It stays in this browser and is sent only to alphavantage.co, so there is no shared key to leak.</p>
+<div class="box"><ol class="steps"><li><a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">Get a free API key at alphavantage.co</a>. It takes under a minute.</li><li>Paste it here and save.<div class="tools" style="margin-top:8px"><input id="kin" type="password" autocomplete="off" placeholder="Your API key" value="${key}" aria-label="Alpha Vantage API key"><button class="chip" id="sk">Save and test</button>${key?'<button class="chip" id="dk">Remove key</button>':""}</div></li><li>Star stocks, then open My dashboard to see live quotes.</li></ol>
+<p class="mute">${msg||(key?"A key is saved on this device.":"No key saved yet.")}</p><p class="mute">The free plan allows about 25 requests a day, so quotes load only for saved stocks and are reused for 15 minutes.</p></div>`}
+refresh();
+render();
+</script></body></html>
